@@ -90,8 +90,20 @@ else:
     print("Else statement")
 """
 
+pycode = """
+x = 3
+while x > 0:
+    print(x)
+    x = x - 1
+"""
+
+pycode = """
+for i in range(10):
+    print("Yay")
+"""
+
 data_segment = {}
-var_counter = {"str": 0, "label": 0}
+var_counter = {"str": 0, "label": 0, "loop": 0}
 
 markers_stack = []
 
@@ -375,8 +387,8 @@ class Block:
 
             op1, comp, op2 = tokens[1:]
             # OPPOSITE !!!
-            ops = {"==": "bne", "<": "bgt", ">": "blt",
-                   "<=": "bge", ">=": "ble", "!=": "beq"}
+            ops = {"==": "bne", "<": "bge", ">": "ble",
+                   "<=": "bgt", ">=": "blt", "!=": "beq"}
 
             if isinstance(op1, int) and isinstance(op2, int):
                 if not eval("".join(map(str, tokens[1:]))):
@@ -417,6 +429,33 @@ class Block:
 
             return (before, after)
 
+        elif ins_type == "WHILE":
+            op1, comp, op2 = tokens[1:]
+            # OPPOSITE !!!
+            ops = {"==": "bne", "<": "bge", ">": "ble",
+                   "<=": "bgt", ">=": "blt", "!=": "beq"}
+
+            if isinstance(op1, int) and isinstance(op2, int):
+                if not eval("".join(map(str, tokens[1:]))):
+                    end_label = f"loop_{var_counter['label']}"
+
+                    var_counter["loop"] += 1
+                    before = f"j {end_label}"
+
+            else:
+                compare_and_jump = self.__getattribute__(ops.get(comp))
+
+                start_label = f"loop_{var_counter['loop']}"
+                end_label = f"endloop_{var_counter['loop']}"
+                var_counter["loop"] += 1
+
+                before = f"{start_label}:\n" + \
+                    compare_and_jump(op1, op2, end_label)
+
+                after = [f"j {start_label}\n{end_label}:\n"]
+
+            return (before, after)
+
         return ""
 
     # def compile(self):
@@ -429,9 +468,10 @@ class Block:
                 token = tokenize(child)
                 ins_type = match_pattern(token)
 
-                if ins_type == "CONDITIONAL":
+                if ins_type in ("CONDITIONAL", "WHILE"):
                     before, after = self.to_mips(child)
                     yield before
+
                 else:
                     yield self.to_mips(child)
 
