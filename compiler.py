@@ -57,7 +57,7 @@ if x == 1:
 """
 
 data_segment = {}
-var_counter = {"str": 0}
+var_counter = {"str": 0, "label": 0}
 
 
 def typ(char):
@@ -183,6 +183,66 @@ class Block:
         elif isinstance(op1, str) and isinstance(op2, int):
             return f"lw $t0, {op1}\nli $t1, {op2}\ndiv $t0, $t0, $t1\nsw $t0, {dest}\n"
 
+    def beq(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nbeq $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nbeq $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nbeq $t0, $t1, {dest}\n"
+
+    def bne(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nbne $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nbne $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nbne $t0, $t1, {dest}\n"
+
+    def blt(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nblt $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nblt $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nblt $t0, $t1, {dest}\n"
+
+    def bgt(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nbgt $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nbgt $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nbgt $t0, $t1, {dest}\n"
+
+    def ble(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nble $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nble $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nble $t0, $t1, {dest}\n"
+
+    def bge(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nbge $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nbge $t0, $t1, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nbge $t0, $t1, {dest}\n"
+
     def assign(self, exp, dest):
         if len(exp) == 1:
             value = exp[0]
@@ -260,18 +320,23 @@ class Block:
             before = after = ""
             op1, comp, op2 = tokens[1:]
 
-            ops = {"==": "eq", "<": "lt", ">": "gt"}
+            ops = {"==": "beq", "<": "blt", ">": "bgt",
+                   "<=": "ble", ">=": "bge", "!=": "bne"}
 
             if isinstance(op1, int) and isinstance(op2, int):
                 if not eval("".join(map(str, tokens[1:]))):
                     end_label = f"label_{var_counter['label']}"
                     before = f"j {end_label}"
+                    after = f"{end_label}"
 
             else:
-                compare = self.__getattribute__(ops.get(comp))
-                comparision = compare(op1, op2)
+                compare_and_jump = self.__getattribute__(ops.get(comp))
 
-            return (before, "##")
+                end_label = f"label_{var_counter['label']}"
+                before = compare_and_jump(op1, op2, end_label)
+                after = f"{end_label}"
+
+            return (before, end_label)
 
         return ""
 
