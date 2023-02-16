@@ -8,6 +8,8 @@ if x == 2:
 print(x)
 """
 
+data_segment = {}
+
 
 def typ(char):
     if char.isalpha():
@@ -76,6 +78,15 @@ class Block:
     def input(self, dest):
         return f"li $a0, {dest}\n\nli $v0, 1\nsyscall"
 
+    def assign(self, exp, dest):
+        if len(exp) == 1:
+            value = exp[0]
+            if isinstance(value, int):
+                if dest not in data_segment:
+                    data_segment[dest] = value
+                return f"li $t0, {value}\nsw $t0, {dest}"
+        return ""
+
     def to_mips(self, python_code):
         tokens = tokenize(python_code)
         ins_type = match_pattern(tokens)
@@ -86,14 +97,21 @@ class Block:
                 return self.print_int(arg)
 
         elif ins_type == "ASSIGN":
-            arg = tokens[1]
-            if isinstance(arg, int):
-                return self.input(arg)
+            variable = tokens[0]
+            args = tokens[2:]
+            return self.assign(args, variable)
 
         return ""
 
     def compile(self):
-        for child in self.child:
+        for child in self.walk():
+            if isinstance(child, str):
+                yield self.to_mips(child)
+            else:
+                yield from child.compile()
+
+    def compile(self):
+        for child in self.walk():
             if isinstance(child, str):
                 yield self.to_mips(child)
             else:
@@ -203,4 +221,13 @@ for mips in blocks[0].compile():
     mips_code.append(mips)
 
 with open("mips.asm", "w") as f:
-    f.write("\n\n".join(mips_code))
+    f.write("\n".join(mips_code))
+
+
+dataseg = []
+
+
+def build_data_segment():
+    for varname, value in data_segment.items():
+        if isinstance(value, int):
+            dataseg.append(f"{varname}: .word {value}")
