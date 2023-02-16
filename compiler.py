@@ -52,12 +52,58 @@ print(x)
 """
 
 pycode = """
+x = 2
 if x == 1:
     print(x)
 """
 
+pycode = """
+x = 1
+if x == 1:
+    print(x)
+    print("X is printed!!")
+
+if x == 2:
+    print(x)
+    print("X will not be printed!!")
+
+"""
+
+pycode = """
+x = 1
+if x == 2:
+    print(x)
+    print("this will not be printed!!")
+
+elif x == 1:
+    print(x)
+    print("1 is printed!!")
+"""
+
+pycode = """
+x = 3
+if x == 2:    
+    print("If statement")
+elif x == 1:    
+    print("Elif statement")
+else:
+    print("Else statement")
+"""
+
 data_segment = {}
 var_counter = {"str": 0, "label": 0}
+
+markers_stack = []
+
+
+class TemporaryMarker:
+    def __init__(self, default, alt, label):
+        self.value = default
+        self.alt_value = alt
+        self.label = label
+
+    def __str__(self):
+        return self.value
 
 
 def typ(char):
@@ -317,24 +363,57 @@ class Block:
             return self.assign(args, variable)
 
         elif ins_type == "CONDITIONAL":
+            # before - a single mips line that should precede a block
+            # after - list of mips lines that should follow a block
             before = after = ""
-            op1, comp, op2 = tokens[1:]
 
-            ops = {"==": "beq", "<": "blt", ">": "bgt",
-                   "<=": "ble", ">=": "bge", "!=": "bne"}
+            if tokens[0] == 'else':
+                last_marker = markers_stack.pop()
+                last_marker.value = last_marker.alt_value
+                after = f"{last_marker.label}:"
+                return before, [after]
+
+            op1, comp, op2 = tokens[1:]
+            # OPPOSITE !!!
+            ops = {"==": "bne", "<": "bgt", ">": "blt",
+                   "<=": "bge", ">=": "ble", "!=": "beq"}
 
             if isinstance(op1, int) and isinstance(op2, int):
                 if not eval("".join(map(str, tokens[1:]))):
                     end_label = f"label_{var_counter['label']}"
+                    else_label = f"else_label_{var_counter['label']}"
+
+                    var_counter["label"] += 1
                     before = f"j {end_label}"
-                    after = f"{end_label}:\n"
+
+                    if tokens[0] == "if":
+                        marker = TemporaryMarker(f"{end_label}:\n",
+                                                 f"j {else_label}\n{end_label}:\n",
+                                                 else_label)
+                        markers_stack.append(marker)
+
+                    # marker can be activated or not depending on the
+                    # existence of else in future line
+                    after = [markers_stack[-1], f"{end_label}:\n"]
 
             else:
                 compare_and_jump = self.__getattribute__(ops.get(comp))
 
                 end_label = f"label_{var_counter['label']}"
+                else_label = f"else_label_{var_counter['label']}"
+                var_counter["label"] += 1
+
+                if tokens[0] == "if":
+                    marker = TemporaryMarker("",
+                                             f"j {else_label}\n",
+                                             else_label)
+                    markers_stack.append(marker)
+
                 before = compare_and_jump(op1, op2, end_label)
-                after = f"{end_label}:\n"
+
+                # marker can be activated or not depending on the
+                # existence of else in future line
+                after = [markers_stack[-1], f"{end_label}:\n"]
 
             return (before, after)
 
@@ -358,7 +437,8 @@ class Block:
 
             else:
                 yield from child.compile()
-                yield after
+                for item in after:
+                    yield item
 
     def walk(self):
         for child in self.child:
@@ -388,7 +468,7 @@ def is_assignment(tokens):
 
 
 def is_conditional(tokens):
-    if len(tokens) >= 1 and tokens[0] == "if":
+    if len(tokens) >= 1 and tokens[0] in ("if", "elif", "else"):
         return True
 
 
@@ -461,7 +541,6 @@ for ins in blocks[0].walk():
 
 mips_code = [".text"]
 for mips in blocks[0].compile():
-
     mips_code.append(mips)
 
 dataseg = [".data"]
@@ -478,5 +557,5 @@ def build_data_segment():
 
 build_data_segment()
 with open("mips.asm", "w") as f:
-    f.write("\n".join(mips_code))
+    f.write("\n".join(map(str, mips_code)))
     f.write("\n".join(dataseg))
