@@ -327,16 +327,16 @@ class Block:
                 if not eval("".join(map(str, tokens[1:]))):
                     end_label = f"label_{var_counter['label']}"
                     before = f"j {end_label}"
-                    after = f"{end_label}"
+                    after = f"{end_label}:\n"
 
             else:
                 compare_and_jump = self.__getattribute__(ops.get(comp))
 
                 end_label = f"label_{var_counter['label']}"
                 before = compare_and_jump(op1, op2, end_label)
-                after = f"{end_label}"
+                after = f"{end_label}:\n"
 
-            return (before, end_label)
+            return (before, after)
 
         return ""
 
