@@ -257,7 +257,21 @@ class Block:
             return self.assign(args, variable)
 
         elif ins_type == "CONDITIONAL":
-            return ("", "")
+            before = after = ""
+            op1, comp, op2 = tokens[1:]
+
+            ops = {"==": "eq", "<": "lt", ">": "gt"}
+
+            if isinstance(op1, int) and isinstance(op2, int):
+                if not eval("".join(map(str, tokens[1:]))):
+                    end_label = f"label_{var_counter['label']}"
+                    before = f"j {end_label}"
+
+            else:
+                compare = self.__getattribute__(ops.get(comp))
+                comparision = compare(op1, op2)
+
+            return (before, "##")
 
         return ""
 
@@ -273,10 +287,11 @@ class Block:
 
                 if ins_type == "CONDITIONAL":
                     before, after = self.to_mips(child)
-                yield self.to_mips(child)
+                    yield before
+                else:
+                    yield self.to_mips(child)
 
             else:
-                yield before
                 yield from child.compile()
                 yield after
 
