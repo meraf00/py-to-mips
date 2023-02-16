@@ -35,7 +35,29 @@ print(y)
 print(a)
 """
 
+pycode = """
+x = 4 * 2
+y = 4 - x
+y = 16 / x
+print(x)
+print(y)
+print("Hello world")
+"""
+
+pycode = """
+x = input(1)
+print(x)
+x = input("apple")
+print(x)
+"""
+
+pycode = """
+if x == 1:
+    print(x)
+"""
+
 data_segment = {}
+var_counter = {"str": 0}
 
 
 def typ(char):
@@ -86,6 +108,12 @@ def tokenize(line):
             else:
                 token.append(cur)
         i += 1
+
+    while "(" in token:
+        token.remove("(")
+    while ")" in token:
+        token.remove(")")
+
     return token
 
 
@@ -129,17 +157,37 @@ class Block:
         if isinstance(op1, str) and isinstance(op2, str):
             return f"lw $t0, {op1}\nlw $t1, {op2}\nsub $t0, $t0, $t1\nsw $t0, {dest}\n"
 
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nsub $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nsub $t0, $t0, $t1\nsw $t0, {dest}\n"
+
     def mul(self, op1, op2, dest):
         if isinstance(op1, str) and isinstance(op2, str):
             return f"lw $t0, {op1}\nlw $t1, {op2}\nmul $t0, $t0, $t1\nsw $t0, {dest}\n"
 
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nmul $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nmul $t0, $t0, $t1\nsw $t0, {dest}\n"
+
     def div(self, op1, op2, dest):
         if isinstance(op1, str) and isinstance(op2, str):
-            return f"lw $t0, {op1}\nlw $t1, {op2}\nadiv $t0, $t0, $t1\nsw $t0, {dest}\n"
+            return f"lw $t0, {op1}\nlw $t1, {op2}\ndiv $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\ndiv $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\ndiv $t0, $t0, $t1\nsw $t0, {dest}\n"
 
     def assign(self, exp, dest):
         if len(exp) == 1:
             value = exp[0]
+            if value == "input":
+                raise Exception("unsuppotred")
             if isinstance(value, int):
                 if dest not in data_segment:
                     data_segment[dest] = value
@@ -153,6 +201,17 @@ class Block:
                     if dest not in data_segment:
                         data_segment[dest] = 0
                     return f"lw $t0, {value}\nsw $t0, {dest}"
+
+        elif len(exp) == 2:
+            preamble = ""
+            arg = exp[1]
+            print_ = f"print({arg})"
+            preamble = self.to_mips(print_)
+
+            take_input = f"la $a0, {dest}\nli $a1, 20\nli $v0, 8\nsyscall\n"
+            if dest not in data_segment:
+                data_segment[dest] = " " * 20
+            return preamble + take_input
 
         elif len(exp) == 3:
             ops = {"+": "add", "-": "sub", "*": "mul", "/": "div"}
@@ -185,27 +244,41 @@ class Block:
                     return self.print_var_int(arg)
                 elif isinstance(argument_value, str):
                     return self.print_var_str(arg)
+                elif argument_value == None:
+                    var = f"str_literal_{var_counter['str']}"
+
+                    self.assign([arg], var)
+                    var_counter['str'] += 1
+                    return self.print_var_str(var)
 
         elif ins_type == "ASSIGN":
             variable = tokens[0]
             args = tokens[2:]
             return self.assign(args, variable)
 
-        return ""
+        elif ins_type == "CONDITIONAL":
+            return ("", "")
 
-    def compile(self):
-        for child in self.walk():
-            # if isinstance(child, str):
-            yield self.to_mips(child)
-            # else:
-            #     yield from child.compile()
+        return ""
 
     # def compile(self):
     #     for child in self.walk():
-    #         if isinstance(child, str):
-    #             yield self.to_mips(child)
-    #         else:
-    #             yield from child.compile()
+    #         yield self.to_mips(child)
+    def compile(self):
+        after = before = "#"
+        for child in self.child:
+            if isinstance(child, str):
+                token = tokenize(child)
+                ins_type = match_pattern(token)
+
+                if ins_type == "CONDITIONAL":
+                    before, after = self.to_mips(child)
+                yield self.to_mips(child)
+
+            else:
+                yield before
+                yield from child.compile()
+                yield after
 
     def walk(self):
         for child in self.child:
@@ -308,6 +381,7 @@ for ins in blocks[0].walk():
 
 mips_code = [".text"]
 for mips in blocks[0].compile():
+
     mips_code.append(mips)
 
 dataseg = [".data"]
