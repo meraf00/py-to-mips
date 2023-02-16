@@ -29,7 +29,10 @@ print(y)
 pycode = """
 x = 31
 y = 34 + x
+z = 4 + 5
+a = x + z
 print(y)
+print(a)
 """
 
 data_segment = {}
@@ -112,10 +115,27 @@ class Block:
     def input(self, dest):
         return f"li $a0, {dest}\n\nli $v0, 1\nsyscall\n"
 
-    def add(self, op1, op2):
-        if isinstance(op1, str):
-            return f"lw $t0, {op1}\nlw $t0, {op1}\n"
-        
+    def add(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nadd $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, int) and isinstance(op2, str):
+            return f"li $t0, {op1}\nlw $t1, {op2}\nadd $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+        elif isinstance(op1, str) and isinstance(op2, int):
+            return f"lw $t0, {op1}\nli $t1, {op2}\nadd $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+    def sub(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nsub $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+    def mul(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nmul $t0, $t0, $t1\nsw $t0, {dest}\n"
+
+    def div(self, op1, op2, dest):
+        if isinstance(op1, str) and isinstance(op2, str):
+            return f"lw $t0, {op1}\nlw $t1, {op2}\nadiv $t0, $t0, $t1\nsw $t0, {dest}\n"
 
     def assign(self, exp, dest):
         if len(exp) == 1:
@@ -139,18 +159,15 @@ class Block:
 
             op1, op, op2 = exp
 
+            if dest not in data_segment:
+                data_segment[dest] = 0
+
             if isinstance(op1, int) and isinstance(op2, int):
                 return self.assign([int(eval("".join(map(str, exp))))], dest)
 
-            elif isinstance(op1, int) and isinstance(op2, str):
+            else:
                 operation = self.__getattribute__(ops.get(op))
-                print(operation)
-
-            elif isinstance(op1, str) and isinstance(op2, int):
-                pass
-
-            elif isinstance(op1, str) and isinstance(op2, str):
-                pass
+                return operation(op1, op2, dest)
 
         return ""
 
