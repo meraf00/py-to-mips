@@ -216,18 +216,19 @@ for ins in blocks[0].walk():
     ins_type = match_pattern(tokens)
     print(ins, tokens, ins_type)
 
-mips_code = []
+mips_code = [".text"]
 for mips in blocks[0].compile():
     mips_code.append(mips)
 
-with open("mips.asm", "w") as f:
-    f.write("\n".join(mips_code))
-
-
-dataseg = []
+dataseg = [".data"]
 
 
 def build_data_segment():
     for varname, value in data_segment.items():
         if isinstance(value, int):
             dataseg.append(f"{varname}: .word {value}")
+
+
+with open("mips.asm", "w") as f:
+    f.write("\n".join(mips_code))
+    f.write("\n".join(dataseg))
