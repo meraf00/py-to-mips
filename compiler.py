@@ -1,11 +1,35 @@
 pycode = """
 x = 3
+y = "a"
+z = x
 if x == 2:
     x = 4
     while x < 10:
         x = x + 1
     print(2)
 print(x)
+"""
+
+pycode = """
+x = 3
+print(x)
+x = 5
+z = x
+print(z)
+print(x)
+"""
+
+pycode = """
+x = "apple"
+print(x)
+y = 34 + 1
+print(y)
+"""
+
+pycode = """
+x = 31
+y = 34 + x
+print(y)
 """
 
 data_segment = {}
@@ -28,14 +52,18 @@ def tokenize(line):
     i = 0
     while i < len(line):
         char = line[i]
+
         if char in ["'", '"']:
-            for j in range(i+1, len(line)):
-                if j == char:
+            j = i
+            i += 1
+            while i < len(line):
+                if line[i] == char:
                     break
+                i += 1
             else:
                 raise Exception("unterminated string >" + line)
 
-            token.append(line[i:j+1])
+            token.append(line[j:i+1])
         elif char in [" ", "\t"]:
             continue
         else:
@@ -73,10 +101,21 @@ class Block:
                 yield from child.recreate(depth + 1)
 
     def print_int(self, num):
-        return f"li $a0, {num}\nli $v0, 1\nsyscall"
+        return f"li $a0, {num}\nli $v0, 1\nsyscall\nli $a0, 10\nli $v0, 11\nsyscall\n"
+
+    def print_var_int(self, var):
+        return f"lw $a0, {var}\nli $v0, 1\nsyscall\nli $a0, 10\nli $v0, 11\nsyscall\n"
+
+    def print_var_str(self, var):
+        return f"la $a0, {var}\nli $v0, 4\nsyscall\nli $a0, 10\nli $v0, 11\nsyscall\n"
 
     def input(self, dest):
-        return f"li $a0, {dest}\n\nli $v0, 1\nsyscall"
+        return f"li $a0, {dest}\n\nli $v0, 1\nsyscall\n"
+
+    def add(self, op1, op2):
+        if isinstance(op1, str):
+            return f"lw $t0, {op1}\nlw $t0, {op1}\n"
+        
 
     def assign(self, exp, dest):
         if len(exp) == 1:
@@ -84,8 +123,35 @@ class Block:
             if isinstance(value, int):
                 if dest not in data_segment:
                     data_segment[dest] = value
-                    print(data_segment)
                 return f"li $t0, {value}\nsw $t0, {dest}"
+
+            elif isinstance(value, str):
+                if value[0] in ["'", '"']:  # actual str
+                    data_segment[dest] = value[1:-1]
+
+                else:  # variable
+                    if dest not in data_segment:
+                        data_segment[dest] = 0
+                    return f"lw $t0, {value}\nsw $t0, {dest}"
+
+        elif len(exp) == 3:
+            ops = {"+": "add", "-": "sub", "*": "mul", "/": "div"}
+
+            op1, op, op2 = exp
+
+            if isinstance(op1, int) and isinstance(op2, int):
+                return self.assign([int(eval("".join(map(str, exp))))], dest)
+
+            elif isinstance(op1, int) and isinstance(op2, str):
+                operation = self.__getattribute__(ops.get(op))
+                print(operation)
+
+            elif isinstance(op1, str) and isinstance(op2, int):
+                pass
+
+            elif isinstance(op1, str) and isinstance(op2, str):
+                pass
+
         return ""
 
     def to_mips(self, python_code):
@@ -96,6 +162,12 @@ class Block:
             arg = tokens[1]
             if isinstance(arg, int):
                 return self.print_int(arg)
+            elif isinstance(arg, str):
+                argument_value = data_segment.get(arg)
+                if isinstance(argument_value, int):
+                    return self.print_var_int(arg)
+                elif isinstance(argument_value, str):
+                    return self.print_var_str(arg)
 
         elif ins_type == "ASSIGN":
             variable = tokens[0]
@@ -106,17 +178,17 @@ class Block:
 
     def compile(self):
         for child in self.walk():
-            if isinstance(child, str):
-                yield self.to_mips(child)
-            else:
-                yield from child.compile()
+            # if isinstance(child, str):
+            yield self.to_mips(child)
+            # else:
+            #     yield from child.compile()
 
-    def compile(self):
-        for child in self.walk():
-            if isinstance(child, str):
-                yield self.to_mips(child)
-            else:
-                yield from child.compile()
+    # def compile(self):
+    #     for child in self.walk():
+    #         if isinstance(child, str):
+    #             yield self.to_mips(child)
+    #         else:
+    #             yield from child.compile()
 
     def walk(self):
         for child in self.child:
@@ -224,12 +296,14 @@ for mips in blocks[0].compile():
 dataseg = [".data"]
 
 
-def build_data_segment():    
+def build_data_segment():
     for varname, value in data_segment.items():
-        
         if isinstance(value, int):
-
             dataseg.append(f"{varname}: .word {value}")
+
+        elif isinstance(value, str):
+            dataseg.append(f'{varname}: .asciiz "{value}"')
+
 
 build_data_segment()
 with open("mips.asm", "w") as f:

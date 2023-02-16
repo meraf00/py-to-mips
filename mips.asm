@@ -1,13 +1,20 @@
 .text
-li $t0, 3
-sw $t0, x
 
-li $t0, 4
-sw $t0, x
+la $a0, x
+li $v0, 4
+syscall
+li $a0, 10
+li $v0, 11
+syscall
 
-
-li $a0, 2
+li $t0, 35
+sw $t0, y
+lw $a0, y
 li $v0, 1
 syscall
+li $a0, 10
+li $v0, 11
+syscall
 .data
-x: .word 3
+x: .asciiz "apple"
+y: .word 35
