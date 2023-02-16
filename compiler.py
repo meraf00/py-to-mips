@@ -84,6 +84,7 @@ class Block:
             if isinstance(value, int):
                 if dest not in data_segment:
                     data_segment[dest] = value
+                    print(data_segment)
                 return f"li $t0, {value}\nsw $t0, {dest}"
         return ""
 
@@ -223,12 +224,14 @@ for mips in blocks[0].compile():
 dataseg = [".data"]
 
 
-def build_data_segment():
+def build_data_segment():    
     for varname, value in data_segment.items():
+        
         if isinstance(value, int):
+
             dataseg.append(f"{varname}: .word {value}")
 
-
+build_data_segment()
 with open("mips.asm", "w") as f:
     f.write("\n".join(mips_code))
     f.write("\n".join(dataseg))
