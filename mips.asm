@@ -5,7 +5,7 @@ li $t0, 10
 sw $t0, i
 lw $t7, i
 li $t8, 20
-li $t9, 1
+lw $t9, -
 
 loop_0:
 
