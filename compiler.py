@@ -102,6 +102,16 @@ for i in range(10):
     print("Yay")
 """
 
+pycode = """
+for i in range(10, 20):
+    print("Yay")
+"""
+
+pycode = """
+for i in range(10, 20):
+    print(i)
+"""
+
 data_segment = {}
 var_counter = {"str": 0, "label": 0, "loop": 0}
 
@@ -131,11 +141,9 @@ def typ(char):
 def tokenize(line):
     line = line.strip()
     token = []
-    itera = enumerate(line)
     i = 0
     while i < len(line):
         char = line[i]
-
         if char in ["'", '"']:
             j = i
             i += 1
@@ -148,6 +156,7 @@ def tokenize(line):
 
             token.append(line[j:i+1])
         elif char in [" ", "\t"]:
+            i += 1
             continue
         else:
             cur = []
@@ -348,6 +357,50 @@ class Block:
 
         return ""
 
+    def for_loop(self, start, end, step, loop_variable):
+        load_start = f"lw $t7, {loop_variable}"
+
+        if isinstance(end, int):
+            load_end = f"li $t8, {end}"
+        else:
+            load_end = f"lw $t8, {end}"
+
+        if isinstance(step, int):
+            load_step = f"li $t9, {step}"
+        else:
+            load_step = f"lw $t9, {step}"
+
+        end_loop = f"end_loop_{var_counter['loop']}"
+
+        before = f"""
+
+{self.assign([start], loop_variable)}
+{load_start}
+{load_end}
+{load_step}
+
+loop_{var_counter['loop']}:
+
+blt $t9, $zero, decreasing_{var_counter['loop']}
+bge $t7, $t8, {end_loop}
+j end_guard_{var_counter['loop']}
+
+decreasing_{var_counter['loop']}:
+ble $t7, $t8, {end_loop}
+end_guard_{var_counter['loop']}:
+        """
+
+        after = f"""
+add $t7, $t7, $t9
+sw $t7, {loop_variable}
+j loop_{var_counter['loop']}
+{end_loop}:
+"""
+
+        var_counter['loop'] += 1
+
+        return before, [after]
+
     def to_mips(self, python_code):
         tokens = tokenize(python_code)
         ins_type = match_pattern(tokens)
@@ -456,6 +509,26 @@ class Block:
 
             return (before, after)
 
+        elif ins_type == "FOR":
+            loop_variable = tokens[1]
+
+            length = len(tokens[4:])
+
+            if length == 2:
+                start = 0
+                end = tokens[4]
+                step = 1
+            elif length == 3:
+                start = tokens[4]
+                end = tokens[5]
+                step = 1
+            elif length == 4:
+                start = tokens[4]
+                end = tokens[5]
+                step = tokens[6]
+
+            return self.for_loop(start, end, step, loop_variable)
+
         return ""
 
     # def compile(self):
@@ -468,7 +541,7 @@ class Block:
                 token = tokenize(child)
                 ins_type = match_pattern(token)
 
-                if ins_type in ("CONDITIONAL", "WHILE"):
+                if ins_type in ("CONDITIONAL", "WHILE", "FOR"):
                     before, after = self.to_mips(child)
                     yield before
 
