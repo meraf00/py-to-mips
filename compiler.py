@@ -1,6 +1,5 @@
-data_segment = {}
-var_counter = {"str": 0, "label": 0, "loop": 0}
-markers_stack = []
+from py_parser import *
+from typing import List, Dict
 
 
 class TemporaryMarker:
@@ -13,76 +12,12 @@ class TemporaryMarker:
         return self.value
 
 
-def get_type(char):
-    if char.isalpha():
-        tp = "str"
-    elif char.isdigit():
-        tp = "num"
-    else:
-        tp = "sym"
-    return tp
-
-
-def tokenize(line):
-    line = line.strip()
-    token = []
-    i = 0
-    while i < len(line):
-        char = line[i]
-        if char in ["'", '"']:
-            j = i
-            i += 1
-            while i < len(line):
-                if line[i] == char:
-                    break
-                i += 1
-            else:
-                raise Exception(f"Unterminated string > {line}")
-
-            token.append(line[j:i+1])
-        elif char in [" ", "\t"]:
-            i += 1
-            continue
-        else:
-            cur = []
-            current_type = get_type(char)
-
-            while i < len(line):
-                char = line[i]
-                if char in [" ", "\n", "\t"]:
-                    break
-                elif char in ["'", '"']:
-                    i -= 1
-                    break
-                elif get_type(char) != current_type:
-                    i -= 1
-                    break
-                cur.append(char)
-                i += 1
-
-            while "(" in cur:
-                cur.remove("(")
-            while ")" in cur:
-                cur.remove(")")
-
-            cur = "".join(cur)
-            if cur.isnumeric():
-                token.append(int(cur))
-            else:
-                token.append(cur)
-        i += 1
-
-    tokens = []
-    for t in token:
-        if not isblank(str(t)) and t not in [",", ":"]:
-            tokens.append(t)
-
-    return tokens
-
-
 class Block:
     def __init__(self):
         self.child = []
+        self.data_segment: Dict
+        self.var_counter: Dict
+        self.markers_stack: List
 
     def __repr__(self):
         return str(self.child)
@@ -212,17 +147,17 @@ class Block:
             if value == "input":
                 raise Exception("unsuppotred")
             if isinstance(value, int):
-                if dest not in data_segment:
-                    data_segment[dest] = value
+                if dest not in self.data_segment:
+                    self.data_segment[dest] = value
                 return f"li $t0, {value}\nsw $t0, {dest}\n"
 
             elif isinstance(value, str):
                 if value[0] in ["'", '"']:  # actual str
-                    data_segment[dest] = value[1:-1]
+                    self.data_segment[dest] = value[1:-1]
 
                 else:  # variable
-                    if dest not in data_segment:
-                        data_segment[dest] = 0
+                    if dest not in self.data_segment:
+                        self.data_segment[dest] = 0
                     return f"lw $t0, {value}\nsw $t0, {dest}\n"
 
         elif len(exp) == 2:
@@ -232,8 +167,8 @@ class Block:
             preamble = self.to_mips(print_)
 
             take_input = f"la $a0, {dest}\nli $a1, 20\nli $v0, 8\nsyscall\n"
-            if dest not in data_segment:
-                data_segment[dest] = " " * 20
+            if dest not in self.data_segment:
+                self.data_segment[dest] = " " * 20
             return preamble + take_input
 
         elif len(exp) == 3:
@@ -241,8 +176,8 @@ class Block:
 
             op1, op, op2 = exp
 
-            if dest not in data_segment:
-                data_segment[dest] = 0
+            if dest not in self.data_segment:
+                self.data_segment[dest] = 0
 
             if isinstance(op1, int) and isinstance(op2, int):
                 return self.assign([int(eval("".join(map(str, exp))))], dest)
@@ -266,7 +201,7 @@ class Block:
         else:
             load_step = f"lw $t9, {step}"
 
-        end_loop = f"end_loop_{var_counter['loop']}"
+        end_loop = f"end_loop_{self.var_counter['loop']}"
 
         before = f"""
 
@@ -275,25 +210,25 @@ class Block:
 {load_end}
 {load_step}
 
-loop_{var_counter['loop']}:
+loop_{self.var_counter['loop']}:
 
-blt $t9, $zero, decreasing_{var_counter['loop']}
+blt $t9, $zero, decreasing_{self.var_counter['loop']}
 bge $t7, $t8, {end_loop}
-j end_guard_{var_counter['loop']}
+j end_guard_{self.var_counter['loop']}
 
-decreasing_{var_counter['loop']}:
+decreasing_{self.var_counter['loop']}:
 ble $t7, $t8, {end_loop}
-end_guard_{var_counter['loop']}:
+end_guard_{self.var_counter['loop']}:
         """
 
         after = f"""
 add $t7, $t7, $t9
 sw $t7, {loop_variable}
-j loop_{var_counter['loop']}
+j loop_{self.var_counter['loop']}
 {end_loop}:
 """
 
-        var_counter['loop'] += 1
+        self.var_counter['loop'] += 1
 
         return before, [after]
 
@@ -311,16 +246,16 @@ j loop_{var_counter['loop']}
             if isinstance(arg, int):
                 return self.print_int(arg)
             elif isinstance(arg, str):
-                argument_value = data_segment.get(arg)
+                argument_value = self.data_segment.get(arg)
                 if isinstance(argument_value, int):
                     return self.print_var_int(arg)
                 elif isinstance(argument_value, str):
                     return self.print_var_str(arg)
                 elif argument_value == None:
-                    var = f"str_literal_{var_counter['str']}"
+                    var = f"str_literal_{self.var_counter['str']}"
 
                     self.assign([arg], var)
-                    var_counter['str'] += 1
+                    self.var_counter['str'] += 1
                     return self.print_var_str(var)
 
         elif ins_type == "ASSIGN":
@@ -334,7 +269,7 @@ j loop_{var_counter['loop']}
             before = after = ""
 
             if tokens[0] == 'else':
-                last_marker = markers_stack.pop()
+                last_marker = self.markers_stack.pop()
                 last_marker.value = last_marker.alt_value
                 after = f"{last_marker.label}:"
                 return before, [after]
@@ -346,40 +281,40 @@ j loop_{var_counter['loop']}
 
             if isinstance(op1, int) and isinstance(op2, int):
                 if not eval("".join(map(str, tokens[1:]))):
-                    end_label = f"label_{var_counter['label']}"
-                    else_label = f"else_label_{var_counter['label']}"
+                    end_label = f"label_{self.var_counter['label']}"
+                    else_label = f"else_label_{self.var_counter['label']}"
 
-                    var_counter["label"] += 1
+                    self.var_counter["label"] += 1
                     before = f"j {end_label}"
 
                     if tokens[0] == "if":
                         marker = TemporaryMarker(f"{end_label}:\n",
                                                  f"j {else_label}\n{end_label}:\n",
                                                  else_label)
-                        markers_stack.append(marker)
+                        self.markers_stack.append(marker)
 
                     # marker can be activated or not depending on the
                     # existence of else in future line
-                    after = [markers_stack[-1], f"{end_label}:\n"]
+                    after = [self.markers_stack[-1], f"{end_label}:\n"]
 
             else:
                 compare_and_jump = self.__getattribute__(ops.get(comp))
 
-                end_label = f"label_{var_counter['label']}"
-                else_label = f"else_label_{var_counter['label']}"
-                var_counter["label"] += 1
+                end_label = f"label_{self.var_counter['label']}"
+                else_label = f"else_label_{self.var_counter['label']}"
+                self.var_counter["label"] += 1
 
                 if tokens[0] == "if":
                     marker = TemporaryMarker("",
                                              f"j {else_label}\n",
                                              else_label)
-                    markers_stack.append(marker)
+                    self.markers_stack.append(marker)
 
                 before = compare_and_jump(op1, op2, end_label)
 
                 # marker can be activated or not depending on the
                 # existence of else in future line
-                after = [markers_stack[-1], f"{end_label}:\n"]
+                after = [self.markers_stack[-1], f"{end_label}:\n"]
 
             return (before, after)
 
@@ -391,17 +326,17 @@ j loop_{var_counter['loop']}
 
             if isinstance(op1, int) and isinstance(op2, int):
                 if not eval("".join(map(str, tokens[1:]))):
-                    end_label = f"loop_{var_counter['label']}"
+                    end_label = f"loop_{self.var_counter['label']}"
 
-                    var_counter["loop"] += 1
+                    self.var_counter["loop"] += 1
                     before = f"j {end_label}"
 
             else:
                 compare_and_jump = self.__getattribute__(ops.get(comp))
 
-                start_label = f"loop_{var_counter['loop']}"
-                end_label = f"endloop_{var_counter['loop']}"
-                var_counter["loop"] += 1
+                start_label = f"loop_{self.var_counter['loop']}"
+                end_label = f"endloop_{self.var_counter['loop']}"
+                self.var_counter["loop"] += 1
 
                 before = f"{start_label}:\n" + \
                     compare_and_jump(op1, op2, end_label)
@@ -462,115 +397,60 @@ j loop_{var_counter['loop']}
                 yield from child.walk()
 
 
-def isblank(line):
-    return len(line.strip()) == 0
+class Compiler:
+    def __init__(self, python_code):
+        self.python_code = python_code
+        self.data_segment = {}
+        self.var_counter = {"str": 0, "label": 0, "loop": 0}
+        self.markers_stack = []
 
+    def get_root_block(self):
+        blocks = [Block()]
 
-def indent(line):
-    cnt = 0
-    for char in line:
-        if char == " ":
-            cnt += 1
-        else:
-            break
-    return cnt
+        prev = 0
+        for line in self.python_code.split("\n"):
+            if isblank(line):
+                continue
+            cur = blocks[-1]
+            i = indent(line)
+            if i == prev:
+                cur.child.append(line.strip())
 
+            elif i > prev:
+                new = Block()
+                new.child.append(line.strip())
+                cur.child.append(new)
+                blocks.append(new)
+            else:
+                for _ in range((prev - i) // 4):
+                    blocks.pop()
+                cur = blocks[-1]
 
-def is_assignment(tokens):
-    if len(tokens) >= 3 and tokens[1] == "=":
-        return True
+                cur.child.append(line.strip())
+            prev = i
 
+    def build_data_segment(self):
+        dataseg = [".data"]
+        for varname, value in self.data_segment.items():
+            if isinstance(value, int):
+                dataseg.append(f"{varname}: .word {value}")
 
-def is_conditional(tokens):
-    if len(tokens) >= 1 and tokens[0] in ("if", "elif", "else"):
-        return True
+            elif isinstance(value, str):
+                dataseg.append(f'{varname}: .asciiz "{value}"')
 
+        return dataseg
 
-def is_for_loop(tokens):
-    if len(tokens) >= 1 and tokens[0] == "for":
-        return True
+    def compile(self):
+        root_block = self.get_root_block()
 
+        text_segment = [".text"]
+        for mips in root_block.compile():
+            text_segment.append(mips)
 
-def is_while_loop(tokens):
-    if len(tokens) >= 1 and tokens[0] == "while":
-        return True
+        data_segment = self.build_data_segment()
 
+        mips_code = []
+        mips_code.extend(text_segment)
+        mips_code.extend(data_segment)
 
-def is_print(tokens):
-    if len(tokens) >= 1 and tokens[0] == "print":
-        return True
-
-
-def is_input(tokens):
-    if len(tokens) >= 1 and tokens[0] == "input":
-        return True
-
-
-def match_pattern(tokens):
-    if is_assignment(tokens):
-        return "ASSIGN"
-    elif is_conditional(tokens):
-        return "CONDITIONAL"
-    elif is_for_loop(tokens):
-        return "FOR"
-    elif is_while_loop(tokens):
-        return "WHILE"
-    elif is_print(tokens):
-        return "PRINT"
-    elif is_input(tokens):
-        return "INPUT"
-
-
-blocks = [Block()]
-
-prev = 0
-for line in pycode.split("\n"):
-    print(line)
-    if isblank(line):
-        continue
-    cur = blocks[-1]
-    i = indent(line)
-    if i == prev:
-        cur.child.append(line.strip())
-
-    elif i > prev:
-        new = Block()
-        new.child.append(line.strip())
-        cur.child.append(new)
-        blocks.append(new)
-    else:
-        for _ in range((prev - i) // 4):
-            blocks.pop()
-        cur = blocks[-1]
-
-        cur.child.append(line.strip())
-    prev = i
-
-print(blocks)
-
-if __name__ == "__main__":
-    for ins in blocks[0].walk():
-        tokens = tokenize(ins)
-        ins_type = match_pattern(tokens)
-        print(ins, tokens, ins_type)
-
-mips_code = [".text"]
-for mips in blocks[0].compile():
-    mips_code.append(mips)
-
-dataseg = [".data"]
-
-
-def build_data_segment():
-    for varname, value in data_segment.items():
-        if isinstance(value, int):
-            dataseg.append(f"{varname}: .word {value}")
-
-        elif isinstance(value, str):
-            dataseg.append(f'{varname}: .asciiz "{value}"')
-
-
-build_data_segment()
-with open("mips.asm", "w") as f:
-    f.write("\n".join(map(str, mips_code)))
-    f.write("\n".join(dataseg))
+        return "\n".join(map(str, mips_code))
