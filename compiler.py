@@ -364,6 +364,10 @@ j loop_{self.var_counter['loop']}
                 start = tokens[4]
                 end = tokens[5]
                 step = tokens[6]
+            elif length == 4:
+                start = tokens[4]
+                end = tokens[5]
+                step = int("".join(tokens[6:]))
 
             return self.for_loop(start, end, step, loop_variable)
 
