@@ -108,7 +108,7 @@ for i in range(10, 20):
 """
 
 pycode = """
-for i in range(10, 20, -2):
+for i in range(10, 20, 2):
     print(i)
 """
 
