@@ -1,120 +1,5 @@
-pycode = """
-x = 3
-y = "a"
-z = x
-if x == 2:
-    x = 4
-    while x < 10:
-        x = x + 1
-    print(2)
-print(x)
-"""
-
-pycode = """
-x = 3
-print(x)
-x = 5
-z = x
-print(z)
-print(x)
-"""
-
-pycode = """
-x = "apple"
-print(x)
-y = 34 + 1
-print(y)
-"""
-
-pycode = """
-x = 31
-y = 34 + x
-z = 4 + 5
-a = x + z
-print(y)
-print(a)
-"""
-
-pycode = """
-x = 4 * 2
-y = 4 - x
-y = 16 / x
-print(x)
-print(y)
-print("Hello world")
-"""
-
-pycode = """
-x = input(1)
-print(x)
-x = input("apple")
-print(x)
-"""
-
-pycode = """
-x = 2
-if x == 1:
-    print(x)
-"""
-
-pycode = """
-x = 1
-if x == 1:
-    print(x)
-    print("X is printed!!")
-
-if x == 2:
-    print(x)
-    print("X will not be printed!!")
-
-"""
-
-pycode = """
-x = 1
-if x == 2:
-    print(x)
-    print("this will not be printed!!")
-
-elif x == 1:
-    print(x)
-    print("1 is printed!!")
-"""
-
-pycode = """
-x = 3
-if x == 2:    
-    print("If statement")
-elif x == 1:    
-    print("Elif statement")
-else:
-    print("Else statement")
-"""
-
-pycode = """
-x = 3
-while x > 0:
-    print(x)
-    x = x - 1
-"""
-
-pycode = """
-for i in range(10):
-    print("Yay")
-"""
-
-pycode = """
-for i in range(10, 20):
-    print("Yay")
-"""
-
-pycode = """
-for i in range(10, 20, 2):
-    print(i)
-"""
-
 data_segment = {}
 var_counter = {"str": 0, "label": 0, "loop": 0}
-
 markers_stack = []
 
 
@@ -128,7 +13,7 @@ class TemporaryMarker:
         return self.value
 
 
-def typ(char):
+def get_type(char):
     if char.isalpha():
         tp = "str"
     elif char.isdigit():
@@ -152,7 +37,7 @@ def tokenize(line):
                     break
                 i += 1
             else:
-                raise Exception("unterminated string >" + line)
+                raise Exception(f"Unterminated string > {line}")
 
             token.append(line[j:i+1])
         elif char in [" ", "\t"]:
@@ -160,14 +45,25 @@ def tokenize(line):
             continue
         else:
             cur = []
-            t = typ(char)
+            current_type = get_type(char)
 
             while i < len(line):
                 char = line[i]
-                if char in [" ", "\n", "\t"] or typ(char) != t:
+                if char in [" ", "\n", "\t"]:
+                    break
+                elif char in ["'", '"']:
+                    i -= 1
+                    break
+                elif get_type(char) != current_type:
+                    i -= 1
                     break
                 cur.append(char)
                 i += 1
+
+            while "(" in cur:
+                cur.remove("(")
+            while ")" in cur:
+                cur.remove(")")
 
             cur = "".join(cur)
             if cur.isnumeric():
@@ -176,12 +72,12 @@ def tokenize(line):
                 token.append(cur)
         i += 1
 
-    while "(" in token:
-        token.remove("(")
-    while ")" in token:
-        token.remove(")")
+    tokens = []
+    for t in token:
+        if not isblank(str(t)) and t not in [",", ":"]:
+            tokens.append(t)
 
-    return token
+    return tokens
 
 
 class Block:
@@ -318,7 +214,7 @@ class Block:
             if isinstance(value, int):
                 if dest not in data_segment:
                     data_segment[dest] = value
-                return f"li $t0, {value}\nsw $t0, {dest}"
+                return f"li $t0, {value}\nsw $t0, {dest}\n"
 
             elif isinstance(value, str):
                 if value[0] in ["'", '"']:  # actual str
@@ -327,7 +223,7 @@ class Block:
                 else:  # variable
                     if dest not in data_segment:
                         data_segment[dest] = 0
-                    return f"lw $t0, {value}\nsw $t0, {dest}"
+                    return f"lw $t0, {value}\nsw $t0, {dest}\n"
 
         elif len(exp) == 2:
             preamble = ""
@@ -406,7 +302,12 @@ j loop_{var_counter['loop']}
         ins_type = match_pattern(tokens)
 
         if ins_type == "PRINT":
-            arg = tokens[1]
+            # handle negative numbers
+            if len(tokens) == 3:
+                arg = f"'-{tokens[-1]}'"
+            else:
+                arg = tokens[1]
+
             if isinstance(arg, int):
                 return self.print_int(arg)
             elif isinstance(arg, str):
@@ -514,15 +415,15 @@ j loop_{var_counter['loop']}
 
             length = len(tokens[4:])
 
-            if length == 2:
+            if length == 1:
                 start = 0
                 end = tokens[4]
                 step = 1
-            elif length == 3:
+            elif length == 2:
                 start = tokens[4]
                 end = tokens[5]
                 step = 1
-            elif length == 4:
+            elif length == 3:
                 start = tokens[4]
                 end = tokens[5]
                 step = tokens[6]
@@ -647,10 +548,11 @@ for line in pycode.split("\n"):
 
 print(blocks)
 
-for ins in blocks[0].walk():
-    tokens = tokenize(ins)
-    ins_type = match_pattern(tokens)
-    print(ins, tokens, ins_type)
+if __name__ == "__main__":
+    for ins in blocks[0].walk():
+        tokens = tokenize(ins)
+        ins_type = match_pattern(tokens)
+        print(ins, tokens, ins_type)
 
 mips_code = [".text"]
 for mips in blocks[0].compile():
