@@ -13,11 +13,13 @@ class TemporaryMarker:
 
 
 class Block:
-    def __init__(self):
+    def __init__(self, data_segment, var_counter, marker_stack):
         self.child = []
-        self.data_segment: Dict
-        self.var_counter: Dict
-        self.markers_stack: List
+        
+        # initialized by compiler and passed to every block to sync label names
+        self.data_segment: Dict = data_segment
+        self.var_counter: Dict = var_counter
+        self.markers_stack: List = marker_stack
 
     def __repr__(self):
         return str(self.child)
@@ -405,7 +407,7 @@ class Compiler:
         self.markers_stack = []
 
     def get_root_block(self):
-        blocks = [Block()]
+        blocks = [Block(self.data_segment, self.var_counter, self.markers_stack)]
 
         prev = 0
         for line in self.python_code.split("\n"):
@@ -417,7 +419,7 @@ class Compiler:
                 cur.child.append(line.strip())
 
             elif i > prev:
-                new = Block()
+                new = Block(self.data_segment, self.var_counter, self.markers_stack)
                 new.child.append(line.strip())
                 cur.child.append(new)
                 blocks.append(new)
@@ -428,6 +430,8 @@ class Compiler:
 
                 cur.child.append(line.strip())
             prev = i
+
+        return blocks[0]
 
     def build_data_segment(self):
         dataseg = [".data"]
@@ -454,3 +458,9 @@ class Compiler:
         mips_code.extend(data_segment)
 
         return "\n".join(map(str, mips_code))
+
+if __name__ == "__main__":
+    with open("sample/print.py") as f:
+        compiler = Compiler(f.read())
+        mips = compiler.compile()
+        print(mips)
