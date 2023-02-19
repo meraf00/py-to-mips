@@ -163,6 +163,12 @@ class Block:
                     return f"lw $t0, {value}\nsw $t0, {dest}\n"
 
         elif len(exp) == 2:
+            if exp[0] == "-":
+                value = int("".join(map(str, exp)))
+                if dest not in self.data_segment:
+                    self.data_segment[dest] = value
+                return f"li $t0, {value}\nsw $t0, {dest}\n"
+
             preamble = ""
             arg = exp[1]
             print_ = f"print({arg})"
@@ -349,7 +355,7 @@ j loop_{self.var_counter['loop']}
 
         elif ins_type == "FOR":
             loop_variable = tokens[1]
-
+            print(tokens)
             length = len(tokens[4:])
 
             if length == 1:
@@ -367,7 +373,7 @@ j loop_{self.var_counter['loop']}
             elif length == 4:
                 start = tokens[4]
                 end = tokens[5]
-                step = int("".join(tokens[6:]))
+                step = int("".join(map(str, tokens[6:])))
 
             return self.for_loop(start, end, step, loop_variable)
 
