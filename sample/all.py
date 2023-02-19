@@ -66,6 +66,6 @@ if c == 10:
     k = 0
     while k < 10:
         print(k)
-        k += 1
+        k = k + 1
 else:
     print("The else statement")
