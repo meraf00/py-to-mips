@@ -355,7 +355,7 @@ j loop_{self.var_counter['loop']}
 
         elif ins_type == "FOR":
             loop_variable = tokens[1]
-            print(tokens)
+
             length = len(tokens[4:])
 
             if length == 1:
